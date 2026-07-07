@@ -1,5 +1,6 @@
 import base64
 import re
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -10,6 +11,9 @@ st.set_page_config(layout="wide")
 st.markdown(
     """
     <style>
+        .stApp {
+            background-color: #eaf3ff;
+        }
         .block-container {
             max-width: 100% !important;
             padding-left: 2rem;
@@ -17,11 +21,29 @@ st.markdown(
             padding-top: 1rem;
         }
         .section-block {
-            background: #f8f9fa;
-            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            border: 1px solid #d7e7ff;
             border-radius: 10px;
             padding: 1rem 1.2rem 1.2rem;
             margin-bottom: 1.2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        div[data-testid="stSidebar"] {
+            background-color: #0f2b4d;
+        }
+        div[data-testid="stSidebar"] .stSelectbox > div,
+        div[data-testid="stSidebar"] .stMultiSelect > div,
+        div[data-testid="stSidebar"] .stTextInput > div,
+        div[data-testid="stSidebar"] .stCheckbox > label {
+            background-color: #ffffff;
+            color: #0f2b4d;
+        }
+        div[data-testid="stSidebar"] label,
+        div[data-testid="stSidebar"] h1,
+        div[data-testid="stSidebar"] h2,
+        div[data-testid="stSidebar"] h3,
+        div[data-testid="stSidebar"] p {
+            color: #ffffff;
         }
     </style>
     """,
@@ -37,19 +59,32 @@ selected_months = [m for m in meses if m in selected_months]
 base_dir = Path(__file__).resolve().parent
 excel_files = sorted(base_dir.glob("LEM *.xlsx"))
 
-if not excel_files:
-    st.error("Nenhum arquivo LEM encontrado na pasta do projeto.")
-    st.stop()
-
 workbooks = []
 for path in excel_files:
     year_match = re.search(r"(\d{4})", path.name)
     year = year_match.group(1) if year_match else path.stem
-    workbooks.append((year, path))
+    workbooks.append((year, path, False))
 
-available_years = [year for year, _ in workbooks]
+available_years = sorted({year for year, _, _ in workbooks})
 selected_years = st.sidebar.multiselect("Selecione anos", available_years, default=available_years)
 selected_years = [year for year in available_years if year in selected_years]
+
+uploaded_files = st.sidebar.file_uploader(
+    "Adicionar planilhas",
+    type=["xlsx"],
+    accept_multiple_files=True,
+    help="Selecione arquivos Excel para incluir na análise.",
+)
+
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        year_match = re.search(r"(\d{4})", uploaded_file.name)
+        year = year_match.group(1) if year_match else uploaded_file.name.rsplit(".", 1)[0]
+        workbooks.append((year, uploaded_file, True))
+
+if not workbooks:
+    st.error("Nenhum arquivo LEM encontrado na pasta do projeto ou enviado.")
+    st.stop()
 
 logo_path = base_dir / "Logo.jpeg.jpeg"
 if logo_path.exists():
@@ -109,7 +144,7 @@ def show_section(title, year_sections, chart_title, container):
             title=chart_title,
         )
 
-        container.write("Totais por linha por ano:")
+        container.write("Tabela:")
         container.dataframe(row_totals_df)
 
         bottom_cols = container.columns([1.2, 1.5])
@@ -151,20 +186,59 @@ def show_section(title, year_sections, chart_title, container):
             st.plotly_chart(fig, use_container_width=True)
 
         container.markdown('</div>', unsafe_allow_html=True)
+        return totals_df
+
+
+def show_correlation_heatmap(section_summaries):
+    if not section_summaries:
+        return
+
+    corr_frames = []
+    for title, totals_df in section_summaries.items():
+        monthly_totals = totals_df.sum(axis=1)
+        corr_frames.append(monthly_totals.rename(title))
+
+    if len(corr_frames) < 2:
+        st.info("Selecione mais de uma tabela para visualizar a correlação.")
+        return
+
+    corr_df = pd.concat(corr_frames, axis=1)
+    corr_matrix = corr_df.corr().fillna(0)
+
+    st.markdown("---")
+    st.subheader("Correlação entre tabelas")
+    st.write(
+        "Este gráfico mostra a relação entre as tabelas ao comparar os valores de cada eixo. "
+        "No eixo X e no eixo Y estão as tabelas analisadas, e cada célula representa a correlação entre elas. "
+        "Quando o valor estiver próximo de 1, isso significa que, à medida que o valor de X aumenta, o valor de Y também aumenta. "
+        "Quando estiver próximo de -1, isso significa que, quanto maior o valor de X, menor o valor de Y. "
+        "E quando estiver próximo de 0, indica que não há uma relação clara entre os dois."
+    )
+    fig_corr = px.imshow(
+        corr_matrix,
+        text_auto=True,
+        color_continuous_scale='Viridis',
+        title='Correlação entre tabelas',
+    )
+    st.plotly_chart(fig_corr, use_container_width=True)
 
 section_dt = []
 section_pf = []
 section_saude = []
 section_educacao = []
 
-for year, file_path in workbooks:
+for year, file_source, is_uploaded in workbooks:
     if year not in selected_years:
         continue
 
     try:
-        df = pd.read_excel(file_path, header=2)
+        if is_uploaded:
+            df = pd.read_excel(BytesIO(file_source.getvalue()), header=2)
+        else:
+            df = pd.read_excel(file_source, header=2)
     except PermissionError:
-        st.error(f"Erro: O arquivo {file_path.name} está aberto em outro programa. Feche-o e tente novamente.")
+        file_name = getattr(file_source, "name", str(file_source))
+        st.error(f"Erro: O arquivo {file_name} está aberto em outro programa. Feche-o e tente novamente.")
         continue
 
     tb_dt, _, totais_dt, tb_dt_linhas = prepare_section(df, slice(0, 17), slice(0, 14), selected_months)
@@ -186,6 +260,10 @@ sections = [
     ("Tabela Educação", section_educacao, "Educação por mês"),
 ]
 
+section_summaries = {}
 for title, section, chart_title in sections:
-    show_section(title, section, chart_title, st.container())
+    totals_df = show_section(title, section, chart_title, st.container())
+    section_summaries[title] = totals_df
+
+show_correlation_heatmap(section_summaries)
 
