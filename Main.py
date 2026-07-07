@@ -222,11 +222,61 @@ def show_correlation_heatmap(section_summaries):
     )
     st.plotly_chart(fig_corr, use_container_width=True)
 
+
+def show_missing_data_heatmap(loaded_data, months):
+    if not loaded_data or not months:
+        return
+
+    missing_points = []
+    for year, df in loaded_data:
+        numeric_values = df.iloc[:, 1:14].apply(pd.to_numeric, errors='coerce')
+        numeric_values = numeric_values.reindex(columns=months)
+        if numeric_values.empty:
+            continue
+
+        missing_mask = numeric_values.isna()
+        for idx, row in missing_mask.iterrows():
+            row_label = f"{year} | {idx}"
+            for month in missing_mask.columns:
+                if row.get(month):
+                    missing_points.append({
+                        'Ano': year,
+                        'Linha': row_label,
+                        'Mês': month,
+                    })
+
+    if not missing_points:
+        return
+
+    missing_df = pd.DataFrame(missing_points)
+
+    st.markdown("---")
+    st.subheader("Posições de dados faltantes")
+    st.write(
+        "Este gráfico marca exatamente onde há valores ausentes nas planilhas carregadas. "
+        "Cada ponto mostra a linha e o mês em que um dado está faltando."
+    )
+
+    fig_missing = px.scatter(
+        missing_df,
+        x='Mês',
+        y='Linha',
+        color='Ano',
+        symbol='Ano',
+        title='Dados faltantes por linha e mês',
+        category_orders={'Mês': months},
+        hover_data=['Ano', 'Linha', 'Mês'],
+        height=700,
+    )
+    fig_missing.update_traces(marker=dict(size=8, opacity=0.8))
+    st.plotly_chart(fig_missing, use_container_width=True)
+
 section_dt = []
 section_pf = []
 section_saude = []
 section_educacao = []
 
+loaded_data = []
 for year, file_source, is_uploaded in workbooks:
     if year not in selected_years:
         continue
@@ -240,6 +290,8 @@ for year, file_source, is_uploaded in workbooks:
         file_name = getattr(file_source, "name", str(file_source))
         st.error(f"Erro: O arquivo {file_name} está aberto em outro programa. Feche-o e tente novamente.")
         continue
+
+    loaded_data.append((year, df))
 
     tb_dt, _, totais_dt, tb_dt_linhas = prepare_section(df, slice(0, 17), slice(0, 14), selected_months)
     section_dt.append((year, tb_dt, totais_dt, tb_dt_linhas))
@@ -266,4 +318,5 @@ for title, section, chart_title in sections:
     section_summaries[title] = totals_df
 
 show_correlation_heatmap(section_summaries)
+show_missing_data_heatmap(loaded_data, selected_months)
 
