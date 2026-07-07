@@ -115,29 +115,36 @@ def show_section(title, year_sections, chart_title, container):
         bottom_cols = container.columns([1.2, 1.5])
 
         with bottom_cols[0]:
-            st.write("Totais por mês por ano:")
+            st.write("Totais por linha por ano:")
             
-            # Converter para formato longo para treemap
-            totals_long = totals_df.reset_index().melt(
-                id_vars='index',
-                var_name='Ano',
-                value_name='Total'
-            )
-            totals_long.rename(columns={'index': 'Mês'}, inplace=True)
-            totals_long['Label'] = totals_long['Mês'] + ' - ' + totals_long['Ano'].astype(str)
-
-            if totals_long['Total'].sum() == 0 or totals_long.empty:
+            if row_totals_df.empty:
                 st.write("Nenhum valor disponível para o treemap.")
-                st.dataframe(totals_df)
+                st.dataframe(row_totals_df)
             else:
-                fig_treemap = px.treemap(
-                    totals_long,
-                    path=['Label'],
-                    values='Total',
-                    color='Total',
-                    color_continuous_scale='Blues',
-                )
-                st.plotly_chart(fig_treemap, use_container_width=True)
+                treemap_data = []
+                for row_name in row_totals_df.index:
+                    for col_name in row_totals_df.columns:
+                        value = row_totals_df.loc[row_name, col_name]
+                        if pd.notna(value):
+                            treemap_data.append({
+                                'Linha': str(row_name),
+                                'Ano': str(col_name),
+                                'Total': float(value)
+                            })
+
+                if treemap_data:
+                    treemap_df = pd.DataFrame(treemap_data)
+                    fig_treemap = px.treemap(
+                        treemap_df,
+                        path=['Ano', 'Linha'],
+                        values='Total',
+                        color='Total',
+                        color_continuous_scale='Blues',
+                    )
+                    st.plotly_chart(fig_treemap, use_container_width=True)
+                else:
+                    st.write("Nenhum valor disponível para o treemap.")
+                    st.dataframe(row_totals_df)
 
         with bottom_cols[1]:
             st.write(chart_title)
