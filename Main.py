@@ -1,4 +1,3 @@
-import base64
 import re
 from io import BytesIO
 from pathlib import Path
@@ -89,7 +88,7 @@ selected_years = [year for year in available_years if year in selected_years]
 logo_path = base_dir / "Logo.jpeg"
 if logo_path.exists():
     st.sidebar.markdown("---")
-    st.sidebar.image(str(logo_path), width=140)
+    st.sidebar.image(str(logo_path), width=140, use_column_width=False)
 
 if not selected_years:
     st.sidebar.info("Selecione pelo menos um ano para visualizar os gráficos.")
