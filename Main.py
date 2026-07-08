@@ -65,10 +65,6 @@ for path in excel_files:
     year = year_match.group(1) if year_match else path.stem
     workbooks.append((year, path, False))
 
-available_years = sorted({year for year, _, _ in workbooks})
-selected_years = st.sidebar.multiselect("Selecione anos", available_years, default=available_years)
-selected_years = [year for year in available_years if year in selected_years]
-
 uploaded_files = st.sidebar.file_uploader(
     "Adicionar planilhas",
     type=["xlsx"],
@@ -85,6 +81,10 @@ if uploaded_files:
 if not workbooks:
     st.error("Nenhum arquivo LEM encontrado na pasta do projeto ou enviado.")
     st.stop()
+
+available_years = sorted({year for year, _, _ in workbooks})
+selected_years = st.sidebar.multiselect("Selecione anos", available_years, default=available_years)
+selected_years = [year for year in available_years if year in selected_years]
 
 logo_path = base_dir / "Logo.jpeg.jpeg"
 if logo_path.exists():
