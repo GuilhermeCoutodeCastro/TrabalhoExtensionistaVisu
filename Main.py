@@ -86,12 +86,8 @@ available_years = sorted({year for year, _, _ in workbooks})
 selected_years = st.sidebar.multiselect("Selecione anos", available_years, default=available_years)
 selected_years = [year for year in available_years if year in selected_years]
 
-logo_candidates = [
-    base_dir / "Logo.jpeg",
-
-]
-logo_path = next((path for path in logo_candidates if path.exists()), None)
-if logo_path is not None:
+logo_path = base_dir / "Logo.jpeg"
+if logo_path.exists():
     st.sidebar.markdown("---")
     st.sidebar.image(str(logo_path), width=140)
 
